@@ -1137,7 +1137,14 @@ async function startWatcher(opts: SetupOpts) {
               case 'page-api':
                 curEntries.set(pathname, route)
                 break
-              case 'app-page':
+              case 'app-page': {
+                curEntries.set(pathname, route)
+                // ideally we wouldn't put the whole route in here
+                route.pages.forEach((page) => {
+                  curAppEntries.set(page.originalName, route)
+                })
+                break
+              }
               case 'app-route': {
                 curEntries.set(pathname, route)
                 curAppEntries.set(route.originalName, route)
@@ -1164,6 +1171,12 @@ async function startWatcher(opts: SetupOpts) {
               const subscription = await subscriptionPromise
               await subscription.return?.()
               changeSubscriptions.delete(pathname)
+            }
+          }
+
+          for (const [page] of issues) {
+            if (!curEntries.has(page)) {
+              issues.delete(page)
             }
           }
 
@@ -1724,17 +1737,21 @@ async function startWatcher(opts: SetupOpts) {
               break
             }
             case 'app-page': {
+              const pageRoute =
+                route.pages.find((p) => p.originalName === page) ??
+                route.pages[0]
+
               finishBuilding = startBuilding(pathname, requestUrl)
               const writtenEndpoint = await processResult(
                 page,
-                await route.htmlEndpoint.writeToDisk()
+                await pageRoute.htmlEndpoint.writeToDisk()
               )
 
               changeSubscription(
                 page,
                 'server',
                 true,
-                route.rscEndpoint,
+                pageRoute.rscEndpoint,
                 (_page, change) => {
                   if (
                     change.issues.some((issue) => issue.severity === 'error')
@@ -1850,7 +1867,7 @@ async function startWatcher(opts: SetupOpts) {
           default:
         }
       }
-    })()
+    })().catch(() => {})
 
     return hotReloader
   }
